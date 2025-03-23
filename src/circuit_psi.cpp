@@ -34,11 +34,19 @@
 #include <ENCRYPTO_utils/parse_options.h>
 #include "abycore/aby/abyparty.h"
 
-#include "common/functionalities.h"
 #include "ENCRYPTO_utils/connection.h"
 #include "ENCRYPTO_utils/socket.h"
 #include "common/config.h"
+#include "common/functionalities.h"
 
+/**
+ * @brief 读取测试选项并解析命令行参数。
+ *
+ * @param argcp 命令行参数的数量。
+ * @param argvp 命令行参数的数组。
+ * @return ENCRYPTO::PsiAnalyticsContext 返回解析后的上下文。
+ * @throws std::runtime_error 如果提供的 PSM 类型无效。
+ */
 auto read_test_options(int32_t argcp, char **argvp) {
   namespace po = boost::program_options;
   ENCRYPTO::PsiAnalyticsContext context;
@@ -88,45 +96,46 @@ auto read_test_options(int32_t argcp, char **argvp) {
 
   context.nbins = context.neles * context.epsilon;
 
-  context.fbins=context.fepsilon * context.neles * context.nfuns;
+  context.fbins = context.fepsilon * context.neles * context.nfuns;
 
   return context;
 }
 
-int main(int argc, char **argv) {
+int test(int argc, char **argv) {
   auto context = read_test_options(argc, argv);
   auto gen_bitlen = static_cast<std::size_t>(std::ceil(std::log2(context.neles))) + 3;
   std::vector<uint64_t> inputs;
 
-  if(context.role == CLIENT) {
-    for(int i=0;i<context.neles;i++){
-      inputs.push_back(1000*i);
+  if (context.role == SERVER) {
+    for (int i = 0; i < context.neles; i++) {
+      inputs.push_back(2000 * i);
     }
   } else {
-    for(int i=0;i<context.neles;i++){
-      inputs.push_back(2000*i);
+    for (int i = 0; i < context.neles; i++) {
+      inputs.push_back(1000 * i);
     }
   }
 
-  //Setup Connection
-  std::unique_ptr<CSocket> sock = ENCRYPTO::EstablishConnection(context.address, context.port, static_cast<e_role>(context.role));
-  sci::NetIO* ioArr[2];
+  // Setup Connection
+  std::unique_ptr<CSocket> sock = ENCRYPTO::EstablishConnection(context.address, context.port,
+                                                                static_cast<e_role>(context.role));
+  sci::NetIO *ioArr[2];
   osuCrypto::IOService ios;
   osuCrypto::Channel chl;
   osuCrypto::Session *ep;
   std::string name = "n";
 
-  if(context.role == SERVER) {
-    ioArr[0] = new sci::NetIO(nullptr, context.port+1);
-    ioArr[1] = new sci::NetIO(nullptr, context.port+2);
-    ep= new osuCrypto::Session(ios, context.address, context.port + 3, osuCrypto::SessionMode::Server,
-                          name);
+  if (context.role == SERVER) {
+    ioArr[0] = new sci::NetIO(nullptr, context.port + 1);
+    ioArr[1] = new sci::NetIO(nullptr, context.port + 2);
+    ep = new osuCrypto::Session(ios, context.address, context.port + 3,
+                                osuCrypto::SessionMode::Server, name);
     chl = ep->addChannel(name, name);
   } else {
-    ioArr[0] = new sci::NetIO(context.address.c_str(), context.port+1);
-    ioArr[1] = new sci::NetIO(context.address.c_str(), context.port+2);
-    ep = new osuCrypto::Session(ios, context.address, context.port + 3, osuCrypto::SessionMode::Client,
-                          name);
+    ioArr[0] = new sci::NetIO(context.address.c_str(), context.port + 1);
+    ioArr[1] = new sci::NetIO(context.address.c_str(), context.port + 2);
+    ep = new osuCrypto::Session(ios, context.address, context.port + 3,
+                                osuCrypto::SessionMode::Client, name);
     chl = ep->addChannel(name, name);
   }
 
@@ -136,14 +145,66 @@ int main(int argc, char **argv) {
   AccumulateCommunicationPSI(sock, chl, ioArr, context);
   PrintCommunication(context);
 
-  //End Connection
+  // End Connection
   sock->Close();
   chl.close();
   ep->stop();
   ios.stop();
 
   for (int i = 0; i < 2; i++) {
-      delete ioArr[i];
+    delete ioArr[i];
   }
+  return EXIT_SUCCESS;
+}
+
+int main(int argc, char **argv) {
+  auto context = read_test_options(argc, argv);
+
+  std::string address = "127.0.0.1";
+  std::uint64_t port = context.port;
+  std::uint64_t role = static_cast<std::uint64_t>(context.role);
+  std::uint64_t bitlen = context.bitlen;
+  std::uint64_t radix = context.radix;
+
+  std::unique_ptr<CSocket> sock =
+      ENCRYPTO::EstablishConnection(address, port, static_cast<e_role>(role));
+
+  sci::NetIO *ioArr[2];
+  osuCrypto::IOService ios;
+  osuCrypto::Channel chl;
+  osuCrypto::Session *ep;
+  std::string name = "n";
+
+  std::vector<uint64_t> inputs1;
+
+  if (role == SERVER) {
+    // inputs1.push_back(2000);
+
+    // for (int i = 0; i < 1000; i++) {
+    inputs1.push_back(2000 * i);
+    // }
+  } else {
+    // for (int i = 0; i < 1000; i++) {
+    //   inputs1.push_back(1000 * i);
+    // }
+    for (int i = 0; i < 1000; i++) {
+      inputs1.push_back(2000 * i);
+    }
+  }
+
+  if (role == SERVER) {
+    ioArr[0] = new sci::NetIO(nullptr, port + 1);
+    ioArr[1] = new sci::NetIO(nullptr, port + 2);
+  } else {
+    ioArr[0] = new sci::NetIO(address.c_str(), port + 1);
+    ioArr[1] = new sci::NetIO(address.c_str(), port + 2);
+  }
+
+  ENCRYPTO::run_psm_1(inputs1, role, bitlen, radix, ioArr);
+
+  for (int i = 0; i < 2; i++) {
+    delete ioArr[i];
+  }
+
   return EXIT_SUCCESS;
 }

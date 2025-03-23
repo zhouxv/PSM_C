@@ -69,6 +69,63 @@ using share_ptr = std::shared_ptr<share>;
 using milliseconds_ratio = std::ratio<1, 1000>;
 using duration_millis = std::chrono::duration<double, milliseconds_ratio>;
 
+void run_psm_1(std::vector<uint64_t> &inputs, uint64_t role, uint64_t bitlen, uint64_t radix,
+               sci::NetIO *ioArr[2], std::string address, uint64_t port) {
+  //  Server role=0 party = 2 Bob
+  //  Client role=1 party = 1 Alice 有一个集合
+  std::cout << "role: " << role << std::endl;
+
+  sci::OTPack<sci::NetIO> *otpackArr[2];
+
+  // Config
+  int l = (int)bitlen;
+  int b = (int)radix;
+  int num_cmps, rmdr;
+  // rmdr 是 context.nbins 除以 8 的余数。它用于确定在处理输入数据时是否需要填充额外的位
+  rmdr = inputs.size() % 8;
+  // num_cmps 是 context.nbins 加上 rmdr 的值。它表示在进行比较时的总数量
+  num_cmps = inputs.size() + rmdr;
+
+  int pad;
+  uint64_t value;
+
+  int party = 1;
+
+  if (role == SERVER) {
+    party = 2;
+    pad = rmdr;
+    value = S_CONST;
+    for (int i = 0; i < pad; i++) {
+      content_of_bins[inputs.size() + i] = value;
+    }
+  } else {
+    pad = 3 * rmdr;
+    value = C_CONST;
+    for (int i = 0; i < pad; i++) {
+      content_of_bins[3 * inputs.size() + i] = value;
+    }
+  }
+
+  uint8_t *res_shares = new uint8_t[num_cmps];
+
+  otpackArr[0] = new OTPack<NetIO>(ioArr[0], party, b, l);
+  otpackArr[1] = new OTPack<NetIO>(ioArr[1], 3 - party, b, l);
+
+  perform_equality(inputs.data(), party, l, b, num_cmps, address, port, res_shares, ioArr,
+                   otpackArr);
+
+  cout << "Writing resultant shares to File ..." << endl;
+  ofstream res_file;
+  res_file.open("res_share_P" + to_string(role) + ".txt");
+  for (int i = 0; i < inputs.size(); i++) {
+    // res_file << res_shares[i] << endl;
+    res_file << static_cast<int>(inputs[i]) << " " << static_cast<int>(res_shares[i]) << endl;
+  }
+  res_file.close();
+
+  cout << "finnished." << endl;
+}
+
 /**
  * 运行电路PSI。
  *
@@ -431,9 +488,10 @@ void run_circuit_psi(const std::vector<std::uint64_t> &inputs, PsiAnalyticsConte
   // Writing resultant shares to file
   cout << "Writing resultant shares to File ..." << endl;
   ofstream res_file;
-  res_file.open("res_share_P" + to_string(context.role) + ".dat");
+  res_file.open("res_share_P" + to_string(context.role) + ".txt");
   for (int i = 0; i < context.nbins; i++) {
-    res_file << res_shares[i] << endl;
+    // res_file << res_shares[i] << endl;
+    res_file << static_cast<int>(res_shares[i]) << endl;
   }
   res_file.close();
 }

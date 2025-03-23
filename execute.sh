@@ -11,8 +11,8 @@ cd boost_1_79_0
 ./b2 install --with=all
 cd ..
 
-git clone https://github.com/shahakash28/2PC-Circuit-PSI.git
-cd 2PC-Circuit-PSI
+git clone https://github.com/zhouxv/PSM_C.git
+cd PSM_C
 mkdir build && cd build
 CC=/usr/bin/gcc-9 CXX=/usr/bin/g++-9 cmake ..
 cp ../aux_hash/* ../extern/HashingTables/cuckoo_hashing/.
